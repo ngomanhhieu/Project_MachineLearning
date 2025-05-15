@@ -1,0 +1,8 @@
+Để chạy đoạn code Python bạn gửi, bạn cần cài đặt các gói (thư viện) sau:
+
+1.pandas — xử lý dữ liệu dạng bảng (DataFrame)
+
+2.numpy — hỗ trợ tính toán số học và mảng
+
+3.scikit-learn — thư viện máy học (LogisticRegression, GaussianNB, các metric, preprocessing)
+
