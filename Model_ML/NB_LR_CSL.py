@@ -1,102 +1,114 @@
 import pandas as pd
-import time
+import numpy as np
+from sklearn.preprocessing import LabelEncoder
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
-from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+import time
 
-# ---------------------
-# Bitmap rules như bạn đã cho
-bitmap_rules = {
-    'sbytes': (lambda x: 1 if x >= 340000 else 0),
-    'sloss': (lambda x: 1 if x >= 130 else 0),
-    'sttl': (lambda x: 1 if x in [63, 255] else 0),
-    'trans_depth': (lambda x: 0 if x in [0, 1] else 1),
-    'swin': (lambda x: 1 if x in [0, 255] else 0),
-    'dwin': (lambda x: 1 if x in [0, 255] else 0),
-    'spkts': (lambda x: 1 if x >= 691 else 0),
-    'dpkts': (lambda x: 1 if x >= 1433 else 0),
-    'ct_src_dport_ltm': (lambda x: 1 if x >= 5 else 0),
-    'ct_dst_sport_ltm': (lambda x: 1 if x >= 5 else 0),
-    'ct_dst_src_ltm': (lambda x: 1 if x >= 45 else 0),
-    'dttl': (lambda x: 1 if x == 253 else (0 if x in [29, 30, 31, 32] else -1)),
-    'ct_state_ttl': (lambda x: 1 if x in [4, 5] else 0),
-    'is_ftp_login': (lambda x: 1 if x == 2 else 0),
-    'is_sm_ips_ports': (lambda x: 1 if x == 0 else 0),
-    'dbytes': (lambda x: 1 if x >= 2000000 else 0),
-    'dloss': (lambda x: 1 if x >= 1000 else 0),
-    'smeansz': (lambda x: 1 if x >= 1500 else 0),
-    'response_body_len': (lambda x: 1 if x >= 1000000 else 0),
-    'ct_srv_src': (lambda x: 1 if x >= 50 else 0),
-}
-
-# Nếu có cột 'ct_flow_http_mthd' bạn thêm rule tương tự, nếu không có bỏ ra
-
-# ---------------------
-def apply_bitmap(df):
-    bitmap = pd.DataFrame()
-    for feature, func in bitmap_rules.items():
-        if feature in df.columns:
-            bitmap[feature + '_bit'] = df[feature].apply(func)
+# === Bitmap encoding with user-defined rules ===
+def bitmap_encode(df):
+    bitmap_rules = {
+        'sbytes': lambda x: 1 if x >= 1418 else 0,
+        'dbytes': lambda x: 1 if x >= 1102 else 0,
+        'sloss': lambda x: 1 if x > 0 else 0,
+        'sttl': lambda x: 1 if x in [254, 255] else 0,
+        'swin': lambda x: 1 if x == 255 else 0,
+        'spkts': lambda x: 1 if x >= 12 else 0,
+        'dpkts': lambda x: 1 if x >= 20 else 0,
+        'trans_depth': lambda x: 0 if x in [0, 1] else 1,
+        'ct_src_dport_ltm': lambda x: 1 if x >= 5 else 0,
+        'ct_dst_sport_ltm': lambda x: 1 if x >= 5 else 0,
+        'ct_dst_src_ltm': lambda x: 1 if x >= 45 else 0,
+        'dttl': lambda x: 1 if x == 253 else 0,
+        'ct_state_ttl': lambda x: 1 if x in [4, 5] else 0,
+        'is_ftp_login': lambda x: 1 if x == 2 else 0,
+        'ct_flow_http_mthd': lambda x: 1 if x in [0, 1, 2, 4, 16] else 0,
+        'is_sm_ips_ports': lambda x: 1 if x == 0 else 0,
+        'dloss': lambda x: 1 if x >= 1000 else 0,
+        'smeansz': lambda x: 1 if x >= 1500 else 0,
+        'response_body_len': lambda x: 1 if x >= 1000000 else 0,
+        'ct_srv_src': lambda x: 1 if x >= 50 else 0
+    }
+    encoded_df = df.copy()
+    for col in df.columns:
+        if col in bitmap_rules:
+            encoded_df[col] = df[col].apply(bitmap_rules[col])
         else:
-            print(f"Warning: Feature '{feature}' not found in dataframe columns.")
-    # Xóa các cột có giá trị -1 nếu có
-    bitmap = bitmap.loc[:, (bitmap != -1).all(axis=0)]
-    return bitmap
+            # Nếu cột không nằm trong rule thì bỏ qua hoặc dùng median 
+            encoded_df[col] = df[col].apply(lambda x: 0)  # hoặc 0 tạm cho thống nhất
+    return encoded_df
 
-# ---------------------
-def evaluate_model(name, model, X_train, y_train, X_test, y_test, model_performance):
-    print(f"Training {name}...")
+# === Preprocessing ===
+def preprocess(df):
+    le_dict = {}
+    for col in df.select_dtypes(include=['object']).columns:
+        le = LabelEncoder()
+        df[col] = le.fit_transform(df[col].astype(str))
+        le_dict[col] = le
+    return df, le_dict
+
+def apply_label_encoding(df, le_dict):
+    df = df.copy()
+    for col, le in le_dict.items():
+        df[col] = df[col].astype(str)
+        df = df[df[col].isin(le.classes_)]
+        df[col] = le.transform(df[col])
+    return df
+
+# === Evaluate ===
+def evaluate_model(name, model, X_train, X_test, y_train, y_test, perf_df):
     start = time.time()
     model.fit(X_train, y_train)
     end_train = time.time()
-    
     y_pred = model.predict(X_test)
     end_predict = time.time()
-    
+
     accuracy = accuracy_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred, average='weighted')
     precision = precision_score(y_test, y_pred, average='weighted')
     f1s = f1_score(y_test, y_pred, average='weighted')
-    
-    print(f"[{name}] Accuracy: {accuracy:.2%}")
-    print(f"[{name}] Recall: {recall:.2%}")
-    print(f"[{name}] Precision: {precision:.2%}")
-    print(f"[{name}] F1-Score: {f1s:.2%}")
-    print(f"[{name}] time to train: {end_train - start:.2f} s")
-    print(f"[{name}] time to predict: {end_predict - end_train:.2f} s")
-    print(f"[{name}] total time: {end_predict - start:.2f} s\n")
-    
-    model_performance.loc[name] = [accuracy, recall, precision, f1s,
-                                  end_train - start,
-                                  end_predict - end_train,
-                                  end_predict - start]
 
-# ---------------------
+    print(f"{name} Results")
+    print(f"Accuracy: {accuracy:.2%}")
+    print(f"Recall: {recall:.2%}")
+    print(f"Precision: {precision:.2%}")
+    print(f"F1-Score: {f1s:.2%}")
+    print(f"Train Time: {end_train - start:.2f}s")
+    print(f"Predict Time: {end_predict - end_train:.2f}s")
+    print(f"Total Time: {end_predict - start:.2f}s\n")
+
+    perf_df.loc[name] = [accuracy, recall, precision, f1s,
+                         end_train - start,
+                         end_predict - end_train,
+                         end_predict - start]
+
 def main():
-    # Đọc dữ liệu (thay đường dẫn phù hợp với bạn)
-    train_df = pd.read_csv('UNSW_NB15_training-set.csv')
-    test_df = pd.read_csv('UNSW_NB15_testing-set.csv')
+    df_train = pd.read_csv("UNSW_NB15_training-set.csv")
+    df_test = pd.read_csv("UNSW_NB15_testing-set.csv")
 
-    # Giả sử label là cột 'label'
-    y_train = train_df['label']
-    y_test = test_df['label']
+    df_train, le_dict = preprocess(df_train)
+    df_test = apply_label_encoding(df_test, le_dict)
 
-    # Áp dụng bitmap
-    X_train = apply_bitmap(train_df)
-    X_test = apply_bitmap(test_df)
+    X_train = df_train.drop("label", axis=1)
+    y_train = df_train["label"]
+    X_test = df_test.drop("label", axis=1)
+    y_test = df_test["label"]
 
-    # Khởi tạo bảng kết quả
-    model_performance = pd.DataFrame(columns=['accuracy','recall','precision','f1-score','train_time','predict_time','total_time'])
+    # Encode bitmap 
+    X_train_bitmap = bitmap_encode(X_train)
+    X_test_bitmap = bitmap_encode(X_test)
 
-    # Model 1: Naive Bayes
-    gnb = GaussianNB()
-    evaluate_model("Naive Bayes", gnb, X_train, y_train, X_test, y_test, model_performance)
+    model_performance = pd.DataFrame(columns=["Accuracy", "Recall", "Precision", "F1-Score", "Train Time", "Predict Time", "Total Time"])
 
-    # Model 2: Logistic Regression với max_iter tăng, solver 'lbfgs'
-    logreg = LogisticRegression(max_iter=500, solver='lbfgs', n_jobs=-1)
-    evaluate_model("Logistic Regression", logreg, X_train, y_train, X_test, y_test, model_performance)
+    # CSL - chỉ khác Ra-CSL ở thuật toán (nếu có)
+    # Ví dụ CSL dùng LogisticRegression
+    evaluate_model("CSL Logistic", LogisticRegression(max_iter=1000), X_train_bitmap, X_test_bitmap, y_train, y_test, model_performance)
 
-    print("Summary:")
+    # Nếu cần thêm NB
+    evaluate_model("CSL NB", GaussianNB(), X_train_bitmap, X_test_bitmap, y_train, y_test, model_performance)
+
+    print("\nModel Performance Summary:")
     print(model_performance)
 
 if __name__ == "__main__":
