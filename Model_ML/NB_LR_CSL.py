@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 from sklearn.linear_model import LogisticRegression
-from sklearn.naive_bayes import GaussianNB
+from sklearn.naive_bayes import BernoulliNB
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import time
 
@@ -106,7 +106,7 @@ def main():
     evaluate_model("CSL Logistic", LogisticRegression(max_iter=1000), X_train_bitmap, X_test_bitmap, y_train, y_test, model_performance)
 
     # Nếu cần thêm NB
-    evaluate_model("CSL NB", GaussianNB(), X_train_bitmap, X_test_bitmap, y_train, y_test, model_performance)
+    evaluate_model("CSL NB", BernoulliNB(), X_train_bitmap, X_test_bitmap, y_train, y_test, model_performance)
 
     print("\nModel Performance Summary:")
     print(model_performance)
