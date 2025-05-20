@@ -1,10 +1,15 @@
 import pandas as pd
 import numpy as np
+import time
+import matplotlib.pyplot as plt
+
 from sklearn.preprocessing import LabelEncoder
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-import time
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score,
+    confusion_matrix, ConfusionMatrixDisplay
+)
 
 # === Advanced Bitmap Encoding ===
 def bitmap_encode(df):
@@ -69,7 +74,7 @@ def evaluate_model(name, model, X_train, X_test, y_train, y_test, perf_df):
     precision = precision_score(y_test, y_pred, average='weighted')
     f1s = f1_score(y_test, y_pred, average='weighted')
 
-    print(f"\n {name} (Bitmap) Results")
+    print(f"\n{name} (Bitmap) Results")
     print(f"   Accuracy:  {accuracy:.2%}")
     print(f"   Recall:    {recall:.2%}")
     print(f"   Precision: {precision:.2%}")
@@ -78,10 +83,22 @@ def evaluate_model(name, model, X_train, X_test, y_train, y_test, perf_df):
     print(f"   Predict Time: {end_predict - end_train:.2f}s")
     print(f"   Total Time:   {end_predict - start:.2f}s")
 
-    perf_df.loc[name] = [accuracy, recall, precision, f1s,
-                         end_train - start,
-                         end_predict - end_train,
-                         end_predict - start]
+    # Cập nhật vào bảng hiệu suất
+    perf_df.loc[name] = [
+        accuracy, recall, precision, f1s,
+        end_train - start,
+        end_predict - end_train,
+        end_predict - start
+    ]
+
+    # === Confusion Matrix ===
+    cm = confusion_matrix(y_test, y_pred)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+    disp.plot(cmap=plt.cm.Blues)
+    plt.title(f"Confusion Matrix: {name}")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
 
 # === Main ===
 def main():
@@ -96,16 +113,26 @@ def main():
     X_test = df_test.drop("label", axis=1)
     y_test = df_test["label"]
 
-    # Chỉ sử dụng bitmap mã hóa
+    # Mã hóa bitmap
     X_train_bitmap = bitmap_encode(X_train)
     X_test_bitmap = bitmap_encode(X_test)
 
-    model_performance = pd.DataFrame(columns=["Accuracy", "Recall", "Precision", "F1-Score", "Train Time", "Predict Time", "Total Time"])
+    # Bảng lưu hiệu suất
+    model_performance = pd.DataFrame(columns=[
+        "Accuracy", "Recall", "Precision", "F1-Score",
+        "Train Time", "Predict Time", "Total Time"
+    ])
 
-    evaluate_model("Ra-CSL Logistic", LogisticRegression(max_iter=1000), X_train_bitmap, X_test_bitmap, y_train, y_test, model_performance)
-    evaluate_model("Ra-CSL Naive Bayes", GaussianNB(), X_train_bitmap, X_test_bitmap, y_train, y_test, model_performance)
+    # Ra-CSL Logistic Regression
+    evaluate_model("Ra-CSL Logistic", LogisticRegression(max_iter=1000),
+                   X_train_bitmap, X_test_bitmap, y_train, y_test, model_performance)
 
-    print("\n Model Performance Summary:")
+    # Ra-CSL Naive Bayes
+    evaluate_model("Ra-CSL Naive Bayes", GaussianNB(),
+                   X_train_bitmap, X_test_bitmap, y_train, y_test, model_performance)
+
+    # Tổng kết
+    print("\nModel Performance Summary:")
     print(model_performance)
 
 if __name__ == "__main__":
