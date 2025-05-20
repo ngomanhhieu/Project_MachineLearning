@@ -7,7 +7,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
-    confusion_matrix, confusion_matrix
+    confusion_matrix, ConfusionMatrixDisplay
 )
 
 # === Bitmap Encoding ===
@@ -85,7 +85,7 @@ def evaluate_model(name, model, X_train, X_test, y_train, y_test, perf_df):
 
     # Confusion Matrix
     cm = confusion_matrix(y_test, y_pred)
-    disp =  confusion_matrix(confusion_matrix=cm)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
     disp.plot(xticks_rotation='vertical')
     plt.title(f"{name} - Confusion Matrix")
     plt.tight_layout()
